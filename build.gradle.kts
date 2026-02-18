@@ -38,6 +38,12 @@ graalvmNative {
         named("main") {
             imageName = "jlogfmt"
             buildArgs.add("--verbose")
+            buildArgs.add("-Os")
+            buildArgs.add("--static-nolibc")
+            buildArgs.add("-H:+PrintAnalysisCallTree")
+            buildArgs.add("-H:+PrintImageObjectTree")
+            buildArgs.add("--initialize-at-build-time=picocli")
+            buildArgs.add("-H:+UseSerialGC")
         }
     }
     metadataRepository {
