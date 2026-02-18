@@ -24,7 +24,7 @@ Optionally, it can filter out lines that do not contain any match.
 
 ### Download a pre‑built JAR
 
-You can download the latest `jlogfmt-<version>-all.jar` from the [Releases](../../releases) page.
+You can download precompiled binary `jlogfmt-<info>` from the [Releases](https://github.com/owpk/jlogfmt/releases/latest) page.
 
 ### Build
 
