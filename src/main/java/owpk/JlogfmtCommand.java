@@ -157,33 +157,6 @@ public class JlogfmtCommand implements Runnable {
     }
     private static final String RESET = "\u001B[0m";
 
-    private void printColorTable() {
-        int[] codes = { 30, 31, 32, 33, 34, 35, 36, 37, 90, 91, 92, 93, 94, 95, 96, 97 };
-        String[] names = {
-                "Black", "Red", "Green", "Yellow",
-                "Blue", "Magenta", "Cyan", "White",
-                "Bright Black", "Bright Red", "Bright Green", "Bright Yellow",
-                "Bright Blue", "Bright Magenta", "Bright Cyan", "Bright White"
-        };
-        for (int i = 0; i < codes.length; i++) {
-            info.log(new LoggerProps("  %-3d %-13s",
-                    false, false,
-                    List.of(codes[i], names[i])));
-            if ((i + 1) % 4 == 0)
-                info.log();
-        }
-        if (codes.length % 4 != 0)
-            info.log();
-    }
-
-    private void printMacroTable() {
-        for (var macInfo : MACROS_.values()) {
-            info.log(new LoggerProps("  {%s} – %s%n",
-                    false, false,
-                    List.of(macInfo.name, macInfo.description)));
-        }
-    }
-
     @Override
     public void run() {
         // Use default patterns if none provided
