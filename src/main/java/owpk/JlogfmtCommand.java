@@ -21,26 +21,19 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Model.UsageMessageSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
-import picocli.CommandLine.Spec;
 
 @Command(name = "jlogfmt", mixinStandardHelpOptions = true, version = "0.1", description = "Highlight and filter logs using custom color:regex patterns.", header = "JLogFmt", footer = "Color codes: 30-37 (standard), 90-97 (bright). See ANSI codes for more.")
 public class JlogfmtCommand implements Runnable {
 
-    @Spec
-    private CommandSpec spec;
-
     private static void customizeHelp(CommandSpec spec) {
-        // Определяем ключи для новых секций
         var COLORS_HEADING = "colorsHeading";
         var COLORS_SECTION = "colorsSection";
         var MACROS_HEADING = "macrosHeading";
         var MACROS_SECTION = "macrosSection";
 
-        // Регистрируем рендереры
         Map<String, IHelpSectionRenderer> renderers = spec.usageMessage().sectionMap();
         renderers.put(COLORS_HEADING, help -> help.createHeading("\nColor codes (foreground only):\n"));
         renderers.put(COLORS_SECTION, help -> {
-            // Создаем таблицу цветов
             var table = TextTable.forColumnWidths(help.ansi(), 20, 20, 20, 20);
             table.addRowValues("30 Black", "31 Red", "32 Green", "33 Yellow");
             table.addRowValues("34 Blue", "35 Magenta", "36 Cyan", "37 White");
@@ -51,14 +44,12 @@ public class JlogfmtCommand implements Runnable {
 
         renderers.put(MACROS_HEADING, help -> help.createHeading("\nBuilt-in macros (use like 31:{NAME}):\n"));
         renderers.put(MACROS_SECTION, help -> {
-            // Собираем данные из MACROS
             var table = TextTable.forColumnWidths(help.ansi(), 25, 80);
             for (MacroInfo info : MACROS_.values())
                 table.addRowValues("{" + info.name + "}", info.description);
             return table.toString();
         });
 
-        // Вставляем новые секции перед FOOTER_HEADING
         List<String> keys = new ArrayList<>(spec.usageMessage().sectionKeys());
         int index = keys.indexOf(UsageMessageSpec.SECTION_KEY_FOOTER_HEADING);
         if (index < 0)
@@ -99,10 +90,6 @@ public class JlogfmtCommand implements Runnable {
     @Parameters(description = "Files to process (if none, read from stdin)")
     private List<File> files;
 
-    // @Option(names = { "-h", "--help" }, description = "Show this help message and
-    // exit.")
-    // private boolean helpRequested;
-
     // Default patterns for Spring Boot logs using macros for readability
     private static final List<String> DEFAULT_PATTERNS = Arrays.asList(
             "32:{TS_ISO}", // timestamp in green
@@ -116,26 +103,32 @@ public class JlogfmtCommand implements Runnable {
                 "TS_ISO",
                 "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}(?:Z|[+-]\\d{2}:\\d{2})",
                 "ISO 8601 timestamp with optional Z or offset (e.g., 2026-02-19T04:14:23.848Z or +08:00)"));
+
         MACROS_.put("TS_SIMPLE", new MacroInfo(
                 "TS_SIMPLE",
                 "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}",
                 "Simple date and time: yyyy-MM-dd HH:mm:ss"));
+
         MACROS_.put("TS_UNIX", new MacroInfo(
                 "TS_UNIX",
                 "\\d+",
                 "Unix timestamp (seconds since epoch)"));
+
         MACROS_.put("TS_RFC1123", new MacroInfo(
                 "TS_RFC1123",
                 "[A-Z][a-z]{2}, \\d{2} [A-Z][a-z]{2} \\d{4} \\d{2}:\\d{2}:\\d{2} [A-Z]{3}",
                 "RFC 1123 date format (e.g., Tue, 19 Feb 2026 04:14:23 GMT)"));
+
         MACROS_.put("TS_DATE", new MacroInfo(
                 "TS_DATE",
                 "\\d{4}-\\d{2}-\\d{2}",
                 "Date only: yyyy-MM-dd"));
+
         MACROS_.put("TS_TIME", new MacroInfo(
                 "TS_TIME",
                 "\\d{2}:\\d{2}:\\d{2}",
                 "Time only: HH:mm:ss"));
+
         MACROS_.put("LOGLEVEL", new MacroInfo(
                 "LOGLEVEL",
                 "INFO|WARN|ERROR|DEBUG|TRACE",
