@@ -7,6 +7,7 @@ Optionally, it can filter out lines that do not contain any match.
 ## Features
 
 - Custom **`color:regex`** pattern language – you decide which parts of a log line get which color.
+- **Macro support** – use `{TS_ISO}`, `{LOGLEVEL}` and other built‑in macros instead of writing complex regular expressions manually.
 - Combine multiple patterns; the tool builds a single combined regex with named groups for efficient matching.
 - Built‑in default patterns for typical Spring Boot logs (timestamp, log level, ERROR highlighting).
 - Filter mode (`--filter`) to show only lines that contain at least one match.
@@ -15,7 +16,7 @@ Optionally, it can filter out lines that do not contain any match.
 
 ## Requirements
 
-- Java 25 or later
+- Java 17 or later
 - (Optional) Gradle to build from source
 - (Optional) GraalVM JDK for native image build
 
@@ -23,7 +24,7 @@ Optionally, it can filter out lines that do not contain any match.
 
 ### Download a pre‑built JAR
 
-You can download the latest `log-highlighter-<version>-all.jar` from the [Releases](../../releases) page.
+You can download the latest `jlogfmt-<version>-all.jar` from the [Releases](../../releases) page.
 
 ### Build
 
@@ -41,10 +42,8 @@ The fat JAR will be created in `build/libs/jlogfmt-0.1-all.jar`.
 
 ##### Prerequisites
 
-Install GraalVM (25+ recommended) and set JAVA_HOME accordingly.
-Make sure the native-image utility is available (gu install native-image if needed).
-
-(Optional) Have Gradle installed, or use the Gradle wrapper (./gradlew).
+Install GraalVM (21+ recommended) and set `JAVA_HOME` accordingly.  
+Make sure the `native-image` utility is available (`gu install native-image` if needed).
 
 Then run:
 
@@ -52,7 +51,7 @@ Then run:
 ./gradlew nativeCompile
 ```
 
-The executable will be created at build/native/nativeCompile/jlogfmt. You can now run it directly:
+The executable will be created at `build/native/nativeCompile/jlogfmt`. You can now run it directly:
 
 ```bash
 ./build/native/nativeCompile/jlogfmt -p "31:ERROR" < app.log
@@ -61,7 +60,7 @@ The executable will be created at build/native/nativeCompile/jlogfmt. You can no
 ## Usage
 
 ```bash
-java -jar log-highlighter-0.1-all.jar [OPTIONS] [FILE...]
+java -jar jlogfmt-0.1-all.jar [OPTIONS] [FILE...]
 # or with native image 
 jlogfmt [OPTIONS] [FILE...]
 ```
@@ -72,9 +71,9 @@ If no files are given, the program reads from standard input.
 
 | Option | Description |
 | ------ | ----------- |
-| `-p, --pattern <color:regex>` | Pattern in the format `color:regex`. Can be repeated. |
+| `-p, --pattern <color:regex>` | Pattern in the format `color:regex` (macros allowed). Can be repeated. |
 | `--filter` | Print only lines that contain at least one match. |
-| `-h, --help` | Show help message and exit. |
+| `-h, --help` | Show detailed help message with color codes and macro list, then exit. |
 | `-V, --version` | Print version information and exit. |
 
 ### Pattern format
@@ -88,20 +87,33 @@ Each pattern must follow the syntax:
 - **`<color-code>`** – an integer representing an ANSI foreground color.  
   Supported codes:  
   `30` black, `31` red, `32` green, `33` yellow, `34` blue, `35` magenta, `36` cyan, `37` white  
-  `90` bright black, `91` bright red, `92` bright green, `93` bright yellow, `94` bright blue, `95` bright magenta, `96` bright cyan, `97` bright white  
-  (Other codes can be added by modifying the source.)
+  `90` bright black, `91` bright red, `92` bright green, `93` bright yellow, `94` bright blue, `95` bright magenta, `96` bright cyan, `97` bright white
 
-- **`<regular-expression>`** – any valid Java regular expression.  
-  **Important:** Because the pattern is given on the command line, you may need to escape backslashes. For example, in Bash use `\\d` for a digit.
+- **`<regular-expression>`** – any valid Java regular expression, but you can also use **macros** (see below) to simplify common patterns.  
+  **Important:** When using raw regex, you may need to escape backslashes for your shell (e.g., in Bash use `\\d` for a digit). Macros handle this internally – you write them exactly as shown.
 
 The program combines all provided patterns into a single regular expression using alternation and assigns a unique named group to each pattern. When a line matches, every capturing group that participated is highlighted with its associated color.
+
+### Macros
+
+Macros are placeholders that expand to predefined, complex regular expressions. Use them inside your regex part like `{TIMESTAMP}`. The following macros are built‑in:
+
+| Macro | Description |
+|-------|-------------|
+| `{TS_ISO}` | ISO 8601 timestamp with optional Z or offset (e.g., `2026-02-19T04:14:23.848Z` or `+08:00`) |
+| `{TS_SIMPLE}` | Simple date and time: `yyyy-MM-dd HH:mm:ss` |
+| `{TS_UNIX}` | Unix timestamp (seconds since epoch) |
+| `{TS_RFC1123}` | RFC 1123 date format (e.g., `Tue, 19 Feb 2026 04:14:23 GMT`) |
+| `{TS_DATE}` | Date only: `yyyy-MM-dd` |
+| `{TS_TIME}` | Time only: `HH:mm:ss` |
+| `{LOGLEVEL}` | Standard log levels: `INFO\|WARN\|ERROR\|DEBUG\|TRACE` |
 
 ### Default patterns (Spring Boot)
 
 If no `-p` option is given, the tool uses these built‑in patterns:
 
-- `32:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+\d{2}:\d{2})` – timestamp in green  
-- `33:(INFO|WARN|ERROR|DEBUG|TRACE)` – log level in yellow  
+- `32:{TS_<iso standard>}` – timestamp in green  
+- `33:{LOGLEVEL}` – log level in yellow  
 - `31:(ERROR)` – the word `ERROR` in red (overrides yellow on overlapping matches)
 
 ## Examples
@@ -118,12 +130,12 @@ jlogfmt < application.log
 jlogfmt -p "36:([a-zA-Z0-9.]+(?=\\s+:))" < app.log
 ```
 
-### 3. Multiple patterns: timestamp (green), level (yellow), class (cyan), ERROR (red)
+### 3. Multiple patterns using macros: timestamp (green), level (yellow), class (cyan), ERROR (red)
 
 ```bash
 jlogfmt \
-  -p "32:(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\+\\d{2}:\\d{2})" \
-  -p "33:(INFO|WARN|ERROR|DEBUG|TRACE)" \
+  -p "32:{TS_ISO}" \
+  -p "33:{LOGLEVEL}" \
   -p "31:(ERROR)" \
   -p "36:([a-zA-Z0-9.]+(?=\\s+:))" \
   < springboot.log
@@ -149,7 +161,7 @@ tail -f app.log | jlogfmt -p "31:(ERROR)"
 
 ## How It Works
 
-1. **Pattern parsing** – each `color:regex` argument is split; the color code is mapped to an ANSI escape sequence; the regex is stored.
+1. **Pattern parsing** – each `color:regex` argument is split; the color code is mapped to an ANSI escape sequence; the regex part is expanded by replacing macros with their predefined patterns.
 2. **Combined regex construction** – the tool creates a single regex of the form  
    `(?<g0>regex0)|(?<g1>regex1)|...`  
    Each pattern gets a unique named group (`g0`, `g1`, …).
