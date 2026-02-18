@@ -1,30 +1,33 @@
-# jlogfmt
+# JlogFmt – CLI Tool for Coloring and Filtering Logs
 
-**jlogfmt** is a lightweight CLI tool for highlighting and filtering log files, especially those produced by Spring Boot, but adaptable to any log format via custom regular expressions. It reads from stdin or a file, filters by log level, includes/excludes lines with regex, and colorizes log levels for better readability.
-
-Built with [Micronaut](https://micronaut.io/) and [Picocli](https://picocli.info/), it can be used as a standalone JAR or compiled into a native executable for fast startup.
+A lightweight command-line utility built with **Micronaut** and **Picocli** that highlights parts of log lines based on user‑defined regular expression patterns and ANSI color codes.  
+Reads from standard input or files, applies the patterns, and prints the lines with matching substrings wrapped in color escape sequences.  
+Optionally, it can filter out lines that do not contain any match.
 
 ## Features
 
-- Read from `stdin` (pipe-friendly) or from a file (`-f, --file`).
-- Filter by log levels (`-l, --level`) – `INFO`, `WARN`, `ERROR`, `DEBUG`, `TRACE` (comma-separated).
-- Include lines matching a regex (`-i, --include`).
-- Exclude lines matching a regex (`-e, --exclude`).
-- Highlight log levels using ANSI colors (configurable).
-- Customizable log parsing pattern (`-p, --pattern`) with a named capturing group `level`.
-- Configuration via YAML or environment variables (thanks to Micronaut).
+- Custom **`color:regex`** pattern language – you decide which parts of a log line get which color.
+- Combine multiple patterns; the tool builds a single combined regex with named groups for efficient matching.
+- Built‑in default patterns for typical Spring Boot logs (timestamp, log level, ERROR highlighting).
+- Filter mode (`--filter`) to show only lines that contain at least one match.
+- Reads from `stdin` or from a list of files.
+- Simple and fast – each line is processed by a single regex matcher.
+
+## Requirements
+
+- Java 25 or later
+- (Optional) Gradle to build from source
+- (Optional) GraalVM JDK for native image build
 
 ## Installation
 
-### Prerequisites
+### Download a pre‑built JAR
 
-- Java 25 or later (if using the JAR version)
-- Gradle 8.x (or use the included Gradle wrapper)
-- [GraalVM](https://www.graalvm.org/) (optional, for native image)
+You can download the latest `log-highlighter-<version>-all.jar` from the [Releases](../../releases) page.
 
-### Download the JAR
+### Build
 
-Build it yourself:
+#### Option 1. Plain JAR from source
 
 ```bash
 git clone https://github.com/owpk/jlogfmt.git
@@ -32,133 +35,152 @@ cd jlogfmt
 ./gradlew shadowJar
 ```
 
-The JAR will be located at `target/jlogfmt-1.0.0.jar`.
+The fat JAR will be created in `build/libs/jlogfmt-0.1-all.jar`.
 
-### Native executable (optional)
+#### Option 2. (Recommended) Native image build
 
-To create a native binary using GraalVM:
+##### Prerequisites
+
+Install GraalVM (25+ recommended) and set JAVA_HOME accordingly.
+Make sure the native-image utility is available (gu install native-image if needed).
+
+(Optional) Have Gradle installed, or use the Gradle wrapper (./gradlew).
+
+Then run:
 
 ```bash
 ./gradlew nativeCompile
 ```
 
-The executable `jlogfmt` will be created in the `target/` directory. You can then move it to a directory in your `PATH`.
+The executable will be created at build/native/nativeCompile/jlogfmt. You can now run it directly:
+
+```bash
+./build/native/nativeCompile/jlogfmt -p "31:ERROR" < app.log
+```
 
 ## Usage
 
+```bash
+java -jar log-highlighter-0.1-all.jar [OPTIONS] [FILE...]
+# or with native image 
+jlogfmt [OPTIONS] [FILE...]
 ```
-jlogfmt [-f FILE] [-l LEVELS] [-i INCLUDE] [-e EXCLUDE] [-p PATTERN] [-hV]
-```
+
+If no files are given, the program reads from standard input.
 
 ### Options
 
 | Option | Description |
-|--------|-------------|
-| `-f, --file FILE` | Read from a file instead of stdin. |
-| `-l, --level LEVELS` | Comma-separated list of log levels to show (e.g., `INFO,WARN`). If not specified, all levels are shown. |
-| `-i, --include REGEX` | Only show lines matching the regular expression. |
-| `-e, --exclude REGEX` | Hide lines matching the regular expression. |
-| `-p, --pattern REGEX` | Regular expression to parse each log line. Must contain a named group `level`. Default: `^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\s+(?<level>[A-Z]+)\s+` (works for default Spring Boot logs). |
+| ------ | ----------- |
+| `-p, --pattern <color:regex>` | Pattern in the format `color:regex`. Can be repeated. |
+| `--filter` | Print only lines that contain at least one match. |
 | `-h, --help` | Show help message and exit. |
 | `-V, --version` | Print version information and exit. |
 
+### Pattern format
+
+Each pattern must follow the syntax:
+
+```txt
+<color-code>:<regular-expression>
+```
+
+- **`<color-code>`** – an integer representing an ANSI foreground color.  
+  Supported codes:  
+  `30` black, `31` red, `32` green, `33` yellow, `34` blue, `35` magenta, `36` cyan, `37` white  
+  `90` bright black, `91` bright red, `92` bright green, `93` bright yellow, `94` bright blue, `95` bright magenta, `96` bright cyan, `97` bright white  
+  (Other codes can be added by modifying the source.)
+
+- **`<regular-expression>`** – any valid Java regular expression.  
+  **Important:** Because the pattern is given on the command line, you may need to escape backslashes. For example, in Bash use `\\d` for a digit.
+
+The program combines all provided patterns into a single regular expression using alternation and assigns a unique named group to each pattern. When a line matches, every capturing group that participated is highlighted with its associated color.
+
+### Default patterns (Spring Boot)
+
+If no `-p` option is given, the tool uses these built‑in patterns:
+
+- `32:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+\d{2}:\d{2})` – timestamp in green  
+- `33:(INFO|WARN|ERROR|DEBUG|TRACE)` – log level in yellow  
+- `31:(ERROR)` – the word `ERROR` in red (overrides yellow on overlapping matches)
+
 ## Examples
 
-**Basic usage – read from file and highlight levels:**
+### 1. Basic usage with default patterns
 
 ```bash
-java -jar jlogfmt-1.0.0.jar -f application.log
+jlogfmt < application.log
 ```
 
-**Pipe from another command, filter by ERROR level:**
+### 2. Custom pattern: highlight class names in cyan
 
 ```bash
-tail -f app.log | java -jar jlogfmt-1.0.0.jar -l ERROR
+jlogfmt -p "36:([a-zA-Z0-9.]+(?=\\s+:))" < app.log
 ```
 
-**Include lines containing "Exception" and exclude "DEBUG":**
+### 3. Multiple patterns: timestamp (green), level (yellow), class (cyan), ERROR (red)
 
 ```bash
-cat log.txt | java -jar jlogfmt-1.0.0.jar -i "Exception" -e "DEBUG"
+jlogfmt \
+  -p "32:(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\+\\d{2}:\\d{2})" \
+  -p "33:(INFO|WARN|ERROR|DEBUG|TRACE)" \
+  -p "31:(ERROR)" \
+  -p "36:([a-zA-Z0-9.]+(?=\\s+:))" \
+  < springboot.log
 ```
 
-**Use a custom pattern for logs in a different format (e.g., `[INFO]`):**
+### 4. Filter mode: only show lines containing a class name
 
 ```bash
-java -jar jlogfmt-1.0.0.jar -f custom.log -p "\[(?<level>[A-Z]+)\]"
+jlogfmt --filter -p "36:([a-zA-Z0-9.]+)" < app.log
 ```
 
-**Native binary usage (after building):**
+### 5. Process multiple files
 
 ```bash
-./jlogfmt -f app.log --level WARN,ERROR
+jlogfmt log1.log log2.log log3.log
 ```
 
-## Configuration
-
-Colors for log levels can be customized in `src/main/resources/application.yml` or overridden via environment variables (Micronaut configuration). Defaults:
-
-```yaml
-colors:
-  info: 32   # green
-  warn: 33   # yellow
-  error: 31  # red
-  debug: 36  # cyan
-  trace: 35  # magenta
-  reset: 0   # reset
-```
-
-To change a color, set the corresponding environment variable, e.g.:
+### 6. Pipe from another command
 
 ```bash
-export COLORS_INFO=92  # bright green
+tail -f app.log | jlogfmt -p "31:(ERROR)"
 ```
-
-## Building from Source
-
-```bash
-git clone https://github.com/yourusername/jlogfmt.git
-cd jlogfmt
-mvn clean package
-```
-
-To build a native image with GraalVM (requires `native-image` tool installed):
-
-```bash
-mvn package -Dpackaging=native-image
-```
-
-## Requirements
-
-- Java 17+ (for running the JAR)
-- Maven 3.6+ (for building)
-- GraalVM 22+ (optional, for native image)
 
 ## How It Works
 
-1. **Log parsing** – Each line is matched against the provided pattern (or default). The pattern must define a named capturing group `level` (e.g., `(?<level>[A-Z]+)`). This group’s value is used for level filtering and highlighting.
-2. **Filtering** – Lines are filtered by:
-   - Level set (if provided) – only those with a level in the set pass.
-   - Include regex (if any) – line must contain a match.
-   - Exclude regex (if any) – line must not contain a match.
-3. **Highlighting** – If a level is found and its color is defined, the first occurrence of that level in the line is wrapped with ANSI color codes.
-4. **Output** – Colored lines are printed to stdout. If output is redirected to a file or another program, ANSI codes remain (unless you add a `--no-color` flag – feel free to contribute!).
+1. **Pattern parsing** – each `color:regex` argument is split; the color code is mapped to an ANSI escape sequence; the regex is stored.
+2. **Combined regex construction** – the tool creates a single regex of the form  
+   `(?<g0>regex0)|(?<g1>regex1)|...`  
+   Each pattern gets a unique named group (`g0`, `g1`, …).
+3. **Matching and highlighting** – for every input line, the combined regex is applied. When a match is found, the program iterates over the named groups that participated, collects their start/end positions and associated colors, then inserts the ANSI codes around the matched substrings.
+4. **Filtering** – if `--filter` is used, lines without any match are skipped.
 
-## Limitations / Future Improvements
+Overlapping matches are handled by the regex engine: it finds the next match starting after the end of the previous one. If two patterns could match at exactly the same position, the one that appears first in the alternation (i.e., the one provided earlier on the command line) takes precedence.
 
-- Currently only one occurrence of the level per line is highlighted.
-- No automatic log format detection.
-- `--no-color` flag to disable ANSI codes (useful for piping into files).
-- Support for multiple files / glob patterns.
+## Color Reference
+
+| Code | Color        | Code | Bright Color   |
+|------|--------------|------|----------------|
+| 30   | Black        | 90   | Bright Black   |
+| 31   | Red          | 91   | Bright Red     |
+| 32   | Green        | 92   | Bright Green   |
+| 33   | Yellow       | 93   | Bright Yellow  |
+| 34   | Blue         | 94   | Bright Blue    |
+| 35   | Magenta      | 95   | Bright Magenta |
+| 36   | Cyan         | 96   | Bright Cyan    |
+| 37   | White        | 97   | Bright White   |
+
+## Limitations
+
+- Only foreground colors are supported (no background, bold, underline, etc.).
+- The tool does **not** interpret log structure; it simply applies regex patterns to plain text.
+- If patterns overlap, only the leftmost/longest match is highlighted according to the regex engine's rules.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT License – feel free to use, modify, and distribute.
 
 ## Contributing
 
-Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
-
----
-
-Enjoy colorful logs! 🎨
+Issues and pull requests are welcome! Please ensure any new functionality is covered by tests and follows the existing pattern format.

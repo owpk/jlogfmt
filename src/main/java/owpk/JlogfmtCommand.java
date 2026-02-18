@@ -1,137 +1,238 @@
 package owpk;
 
 import java.io.BufferedReader;
-import java.io.IOException;
+import java.io.File;
+import java.io.FileReader;
 import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import io.micronaut.configuration.picocli.PicocliRunner;
-import io.micronaut.context.annotation.Value;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 
-@Command(name = "jlogfmt",
-        description = "Подсветка и фильтрация логов (аналог jlogfmt для цветного вывода)",
-        mixinStandardHelpOptions = true,
-        version = "1.0.0")
+@Command(
+    name = "jlogfmt",
+    mixinStandardHelpOptions = true,
+    version = "1.0",
+    description = "Highlight and filter logs using custom color:regex patterns.",
+    header = "Log Highlighter",
+    footer = "Color codes: 30-37 (standard), 90-97 (bright). See ANSI codes for more."
+)
 public class JlogfmtCommand implements Runnable {
 
-    public static void main(String[] args) throws Exception {
-        PicocliRunner.run(JlogfmtCommand.class, args);
+    public static void main(String[] args) {
+        try {
+            PicocliRunner.run(JlogfmtCommand.class, args);
+        } catch (Exception e) {
+            System.out.println(e.getLocalizedMessage());
+        }
     }
 
-    @Option(names = {"-f", "--file"}, description = "Файл с логами (если не указан, читает из stdin)")
-    private Path file;
+    @Option(
+        names = {"-p", "--pattern"},
+        description = "Pattern in format 'color:regex'. Can be repeated. Example: 31:(\\d{4}-\\d{2}-\\d{2})"
+    )
+    private List<String> userPatterns;
 
-    @Option(names = {"-l", "--level"}, description = "Уровни логирования для показа (INFO,WARN,ERROR,DEBUG,TRACE)")
-    private Set<String> levels = new HashSet<>();
+    @Option(
+        names = {"--filter"},
+        description = "Only print lines that match at least one pattern"
+    )
+    private boolean filterOnly;
 
-    @Option(names = {"-i", "--include"}, description = "Регулярное выражение: строки должны совпадать")
-    private Pattern includePattern;
+    @Parameters(description = "Files to process (if none, read from stdin)")
+    private List<File> files;
 
-    @Option(names = {"-e", "--exclude"}, description = "Регулярное выражение: строки не должны совпадать")
-    private Pattern excludePattern;
+    // Default patterns for Spring Boot logs (ISO timestamp and log level)
+    private static final List<String> DEFAULT_PATTERNS = Arrays.asList(
+        "32:(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\+\\d{2}:\\d{2})", // timestamp in green
+        "33:(INFO|WARN|ERROR|DEBUG|TRACE)",                                           // level in yellow
+        "31:(ERROR)"                                                                  // ERROR in red (overrides yellow if both match)
+    );
 
-    @Option(names = {"-p", "--pattern"}, description = "Регулярное выражение для разбора строки лога. Должно содержать именованную группу 'level'. По умолчанию: ^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\.\\\\d{3}\\\\s+(?<level>[A-Z]+)\\s+")
-    private String logPattern = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\s+(?<level>[A-Z]+)\\s+";
-
-    @Value("${colors.info:32}")  // зелёный
-    private String colorInfo;
-
-    @Value("${colors.warn:33}")  // жёлтый
-    private String colorWarn;
-
-    @Value("${colors.error:31}") // красный
-    private String colorError;
-
-    @Value("${colors.debug:36}") // циан
-    private String colorDebug;
-
-    @Value("${colors.trace:35}") // пурпурный
-    private String colorTrace;
-
-    @Value("${colors.reset:0}")
-    private String colorReset;
-
-    private static final String ANSI_RESET = "\u001B[0m";
-    private static final String ANSI_PREFIX = "\u001B[";
-
-    private final Map<String, String> levelColors = new HashMap<>();
+    // Map color codes to ANSI escape sequences
+    private static final Map<Integer, String> ANSI_COLORS = new HashMap<>();
+    static {
+        ANSI_COLORS.put(30, "\u001B[30m"); // black
+        ANSI_COLORS.put(31, "\u001B[31m"); // red
+        ANSI_COLORS.put(32, "\u001B[32m"); // green
+        ANSI_COLORS.put(33, "\u001B[33m"); // yellow
+        ANSI_COLORS.put(34, "\u001B[34m"); // blue
+        ANSI_COLORS.put(35, "\u001B[35m"); // magenta
+        ANSI_COLORS.put(36, "\u001B[36m"); // cyan
+        ANSI_COLORS.put(37, "\u001B[37m"); // white
+        ANSI_COLORS.put(90, "\u001B[90m"); // bright black
+        ANSI_COLORS.put(91, "\u001B[91m"); // bright red
+        ANSI_COLORS.put(92, "\u001B[92m"); // bright green
+        ANSI_COLORS.put(93, "\u001B[93m"); // bright yellow
+        ANSI_COLORS.put(94, "\u001B[94m"); // bright blue
+        ANSI_COLORS.put(95, "\u001B[95m"); // bright magenta
+        ANSI_COLORS.put(96, "\u001B[96m"); // bright cyan
+        ANSI_COLORS.put(97, "\u001B[97m"); // bright white
+    }
+    private static final String RESET = "\u001B[0m";
 
     @Override
     public void run() {
-        // Инициализация цветов
-        levelColors.put("INFO", ANSI_PREFIX + colorInfo + "m");
-        levelColors.put("WARN", ANSI_PREFIX + colorWarn + "m");
-        levelColors.put("ERROR", ANSI_PREFIX + colorError + "m");
-        levelColors.put("DEBUG", ANSI_PREFIX + colorDebug + "m");
-        levelColors.put("TRACE", ANSI_PREFIX + colorTrace + "m");
+        // Use default patterns if none provided
+        List<String> patternsToUse = (userPatterns == null || userPatterns.isEmpty())
+                ? DEFAULT_PATTERNS
+                : userPatterns;
 
-        try (BufferedReader reader = createReader()) {
-            Pattern parser = Pattern.compile(logPattern);
-            String line;
+        // Parse patterns into list of PatternWithColor
+        List<PatternWithColor> parsedPatterns = parsePatterns(patternsToUse);
+        if (parsedPatterns.isEmpty()) {
+            System.err.println("No valid patterns provided.");
+            return;
+        }
+
+        // Build combined regex with named groups
+        String combinedRegex = buildCombinedRegex(parsedPatterns);
+        Pattern combinedPattern = Pattern.compile(combinedRegex);
+        Map<String, Integer> groupToColor = buildGroupToColorMap(parsedPatterns);
+
+        // Process input
+        if (files == null || files.isEmpty()) {
+            processStream(new BufferedReader(new InputStreamReader(System.in)), combinedPattern, groupToColor);
+        } else {
+            for (File file : files) {
+                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                    processStream(reader, combinedPattern, groupToColor);
+                } catch (Exception e) {
+                    System.err.println("Error reading file " + file + ": " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private List<PatternWithColor> parsePatterns(List<String> patterns) {
+        List<PatternWithColor> result = new ArrayList<>();
+        Pattern patternParser = Pattern.compile("^(\\d+):(.*)$");
+        for (String p : patterns) {
+            Matcher m = patternParser.matcher(p.trim());
+            if (m.matches()) {
+                int color = Integer.parseInt(m.group(1));
+                String regex = m.group(2);
+                if (ANSI_COLORS.containsKey(color)) {
+                    result.add(new PatternWithColor(color, regex));
+                } else {
+                    System.err.println("Warning: Unsupported color code " + color + " in pattern: " + p + ". Ignored.");
+                }
+            } else {
+                System.err.println("Warning: Invalid pattern format: " + p + ". Expected 'color:regex'. Ignored.");
+            }
+        }
+        return result;
+    }
+
+    private String buildCombinedRegex(List<PatternWithColor> patterns) {
+        List<String> namedGroups = new ArrayList<>();
+        for (int i = 0; i < patterns.size(); i++) {
+            namedGroups.add("(?<g" + i + ">" + patterns.get(i).regex + ")");
+        }
+        return String.join("|", namedGroups);
+    }
+
+    private Map<String, Integer> buildGroupToColorMap(List<PatternWithColor> patterns) {
+        Map<String, Integer> map = new HashMap<>();
+        for (int i = 0; i < patterns.size(); i++) {
+            map.put("g" + i, patterns.get(i).color);
+        }
+        return map;
+    }
+
+    private void processStream(BufferedReader reader, Pattern combinedPattern, Map<String, Integer> groupToColor) {
+        String line;
+        try {
             while ((line = reader.readLine()) != null) {
-                processLine(line, parser);
+                processLine(line, combinedPattern, groupToColor);
             }
-        } catch (IOException e) {
-            System.err.println("Ошибка чтения: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("Error reading input: " + e.getMessage());
         }
     }
 
-    private BufferedReader createReader() throws IOException {
-        if (file != null) {
-            return Files.newBufferedReader(file);
-        } else {
-            return new BufferedReader(new InputStreamReader(System.in));
-        }
-    }
+    private void processLine(String line, Pattern combinedPattern, Map<String, Integer> groupToColor) {
+        Matcher matcher = combinedPattern.matcher(line);
+        List<Match> matches = new ArrayList<>();
 
-    private void processLine(String line, Pattern parser) {
-        // Фильтрация по include/exclude
-        if (includePattern != null && !includePattern.matcher(line).find()) {
+        // Find all matches and record their positions and colors
+        while (matcher.find()) {
+            for (Map.Entry<String, Integer> entry : groupToColor.entrySet()) {
+                String groupName = entry.getKey();
+                int color = entry.getValue();
+                try {
+                    int start = matcher.start(groupName);
+                    if (start != -1) {
+                        int end = matcher.end(groupName);
+                        matches.add(new Match(start, end, color));
+                    }
+                } catch (IllegalArgumentException e) {
+                    // group not present in this match
+                }
+            }
+        }
+
+        // If filter mode and no matches, skip line
+        if (filterOnly && matches.isEmpty()) {
             return;
         }
-        if (excludePattern != null && excludePattern.matcher(line).find()) {
-            return;
-        }
 
-        // Пытаемся извлечь уровень
-        String level = extractLevel(line, parser);
-        if (level != null && !levels.isEmpty() && !levels.contains(level)) {
-            return; // фильтр по уровню не пропускает
-        }
-
-        // Вывод с подсветкой уровня (если найден)
-        if (level != null && levelColors.containsKey(level)) {
-            String color = levelColors.get(level);
-            // Подсвечиваем только уровень (можно и всю строку, но так нагляднее)
-            String highlighted = line.replaceFirst(
-                    Pattern.quote(level),
-                    color + level + ANSI_RESET
-            );
-            System.out.println(highlighted);
-        } else {
+        // If no matches, print line as is (unless filter mode prevented it)
+        if (matches.isEmpty()) {
             System.out.println(line);
+            return;
+        }
+
+        // Sort matches by start position (they are naturally in order but ensure)
+        matches.sort(Comparator.comparingInt(m -> m.start));
+
+        // Build highlighted line with ANSI codes
+        StringBuilder highlighted = new StringBuilder();
+        int lastIdx = 0;
+        for (Match m : matches) {
+            // Append text before match
+            if (m.start > lastIdx) {
+                highlighted.append(line, lastIdx, m.start);
+            }
+            // Append matched part with color
+            highlighted.append(ANSI_COLORS.get(m.color));
+            highlighted.append(line, m.start, m.end);
+            highlighted.append(RESET);
+            lastIdx = m.end;
+        }
+        // Append remaining text after last match
+        if (lastIdx < line.length()) {
+            highlighted.append(line.substring(lastIdx));
+        }
+
+        System.out.println(highlighted);
+    }
+
+    // Helper classes
+    private static class PatternWithColor {
+        int color;
+        String regex;
+        PatternWithColor(int color, String regex) {
+            this.color = color;
+            this.regex = regex;
         }
     }
 
-    private String extractLevel(String line, Pattern parser) {
-        Matcher matcher = parser.matcher(line);
-        if (matcher.find()) {
-            try {
-                return matcher.group("level");
-            } catch (IllegalArgumentException e) {
-                // нет группы level
-                return null;
-            }
+    private static class Match {
+        int start, end, color;
+        Match(int start, int end, int color) {
+            this.start = start;
+            this.end = end;
+            this.color = color;
         }
-        return null;
     }
 }
