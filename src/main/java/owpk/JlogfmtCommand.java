@@ -32,7 +32,7 @@ public class JlogfmtCommand implements Runnable {
         try {
             PicocliRunner.run(JlogfmtCommand.class, args);
         } catch (Exception e) {
-            System.out.println(e.getLocalizedMessage());
+            System.err.println(e.getLocalizedMessage());
         }
     }
 
