@@ -16,7 +16,7 @@ Optionally, it can filter out lines that do not contain any match.
 
 ## Requirements
 
-- Java 17 or later
+- Java 25 or later
 - (Optional) Gradle to build from source
 - (Optional) GraalVM JDK for native image build
 
