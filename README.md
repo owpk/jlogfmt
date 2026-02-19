@@ -27,6 +27,9 @@ Optionally, it can filter out lines that do not contain any match.
 You can download precompiled binary `jlogfmt-<info>` from the [Releases](https://github.com/owpk/jlogfmt/releases/latest) page.
 
 ### Build
+- use automatic script [build.sh](https://github.com/owpk/jlogfmt/blob/main/build.sh)
+
+or:
 
 #### Option 1. Plain JAR from source
 
