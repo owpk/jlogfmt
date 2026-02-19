@@ -27,6 +27,7 @@ Optionally, it can filter out lines that do not contain any match.
 You can download precompiled binary `jlogfmt-<info>` from the [Releases](https://github.com/owpk/jlogfmt/releases/latest) page.
 
 ### Build
+
 - use automatic script [build.sh](https://github.com/owpk/jlogfmt/blob/main/build.sh)
 
 or:
@@ -64,7 +65,7 @@ The executable will be created at `build/native/nativeCompile/jlogfmt`. You can 
 
 ```bash
 java -jar jlogfmt-0.1-all.jar [OPTIONS] [FILE...]
-# or with native image 
+# or with native image
 jlogfmt [OPTIONS] [FILE...]
 ```
 
@@ -72,12 +73,12 @@ If no files are given, the program reads from standard input.
 
 ### Options
 
-| Option | Description |
-| ------ | ----------- |
+| Option                        | Description                                                            |
+| ----------------------------- | ---------------------------------------------------------------------- |
 | `-p, --pattern <color:regex>` | Pattern in the format `color:regex` (macros allowed). Can be repeated. |
-| `--filter` | Print only lines that contain at least one match. |
-| `-h, --help` | Show detailed help message with color codes and macro list, then exit. |
-| `-V, --version` | Print version information and exit. |
+| `--filter`                    | Print only lines that contain at least one match.                      |
+| `-h, --help`                  | Show detailed help message with color codes and macro list, then exit. |
+| `-V, --version`               | Print version information and exit.                                    |
 
 ### Pattern format
 
@@ -101,25 +102,40 @@ The program combines all provided patterns into a single regular expression usin
 
 Macros are placeholders that expand to predefined, complex regular expressions. Use them inside your regex part like `{TIMESTAMP}`. The following macros are built‑in:
 
-| Macro | Description |
-|-------|-------------|
-| `{TS_ISO}` | ISO 8601 timestamp with optional Z or offset (e.g., `2026-02-19T04:14:23.848Z` or `+08:00`) |
-| `{TS_SIMPLE}` | Simple date and time: `yyyy-MM-dd HH:mm:ss` |
-| `{TS_UNIX}` | Unix timestamp (seconds since epoch) |
-| `{TS_RFC1123}` | RFC 1123 date format (e.g., `Tue, 19 Feb 2026 04:14:23 GMT`) |
-| `{TS_DATE}` | Date only: `yyyy-MM-dd` |
-| `{TS_TIME}` | Time only: `HH:mm:ss` |
-| `{LOGLEVEL}` | Standard log levels: `INFO\|WARN\|ERROR\|DEBUG\|TRACE` |
+| Macro          | Description                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| `{TS_ISO}`     | ISO 8601 timestamp with optional Z or offset (e.g., `2026-02-19T04:14:23.848Z` or `+08:00`) |
+| `{TS_SIMPLE}`  | Simple date and time: `yyyy-MM-dd HH:mm:ss`                                                 |
+| `{TS_UNIX}`    | Unix timestamp (seconds since epoch)                                                        |
+| `{TS_RFC1123}` | RFC 1123 date format (e.g., `Tue, 19 Feb 2026 04:14:23 GMT`)                                |
+| `{TS_DATE}`    | Date only: `yyyy-MM-dd`                                                                     |
+| `{TS_TIME}`    | Time only: `HH:mm:ss`                                                                       |
+| `{LOGLEVEL}`   | Standard log levels: `INFO\|WARN\|ERROR\|DEBUG\|TRACE`                                      |
 
 ### Default patterns (Spring Boot)
 
 If no `-p` option is given, the tool uses these built‑in patterns:
 
-- `32:{TS_<iso standard>}` – timestamp in green  
-- `33:{LOGLEVEL}` – log level in yellow  
+- `32:{TS_<iso standard>}` – timestamp in green
+- `33:{LOGLEVEL}` – log level in yellow
 - `31:(ERROR)` – the word `ERROR` in red (overrides yellow on overlapping matches)
 
 ## Examples
+
+### My favorite to highlight all spring boot log parts
+
+```bash
+docker logs backend-prod | jlogfmt \
+  -p "32:{TS_ISO}" \
+  -p "33:(DEBUG|WARN|TRACE)" \
+  -p "90:(\\d+)(?=\\s+---)" \
+  -p "36:(?<=---\\s+\\[)([^\\]]+)" \
+  -p "34:(?<=\\]\\s+\\[)([^\\]]+)" \
+  -p "35:([a-zA-Z0-9.$]+)(?=\\s+:)" \
+  -p "50:(?<=:\\s+).*$" \
+  -p "31:(ERROR)" \
+  -p "34:(INFO)"
+```
 
 ### 1. Basic usage with default patterns
 
@@ -175,16 +191,16 @@ Overlapping matches are handled by the regex engine: it finds the next match sta
 
 ## Color Reference
 
-| Code | Color        | Code | Bright Color   |
-|------|--------------|------|----------------|
-| 30   | Black        | 90   | Bright Black   |
-| 31   | Red          | 91   | Bright Red     |
-| 32   | Green        | 92   | Bright Green   |
-| 33   | Yellow       | 93   | Bright Yellow  |
-| 34   | Blue         | 94   | Bright Blue    |
-| 35   | Magenta      | 95   | Bright Magenta |
-| 36   | Cyan         | 96   | Bright Cyan    |
-| 37   | White        | 97   | Bright White   |
+| Code | Color   | Code | Bright Color   |
+| ---- | ------- | ---- | -------------- |
+| 30   | Black   | 90   | Bright Black   |
+| 31   | Red     | 91   | Bright Red     |
+| 32   | Green   | 92   | Bright Green   |
+| 33   | Yellow  | 93   | Bright Yellow  |
+| 34   | Blue    | 94   | Bright Blue    |
+| 35   | Magenta | 95   | Bright Magenta |
+| 36   | Cyan    | 96   | Bright Cyan    |
+| 37   | White   | 97   | Bright White   |
 
 ## Limitations
 
