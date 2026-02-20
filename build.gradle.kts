@@ -1,7 +1,8 @@
 plugins {
-    id("io.micronaut.application") version "4.6.1"
     id("com.gradleup.shadow") version "8.3.9"
     id("io.micronaut.graalvm") version "4.4.0"
+    id("java")
+    id("application")
 }
 
 version = "0.1"
@@ -12,16 +13,8 @@ repositories {
 }
 
 dependencies {
-    annotationProcessor("org.projectlombok:lombok")
-    annotationProcessor("info.picocli:picocli-codegen")
-    annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
-    implementation("info.picocli:picocli")
-    implementation("io.micronaut.picocli:micronaut-picocli")
-    implementation("io.micronaut.serde:micronaut-serde-jackson")
-    compileOnly("org.projectlombok:lombok")
-    runtimeOnly("ch.qos.logback:logback-classic")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    runtimeOnly("io.micronaut:micronaut-graal")    
+    annotationProcessor("info.picocli:picocli-codegen:4.7.7")
+    implementation("info.picocli:picocli:4.7.7")
 }
 
 application {
@@ -52,15 +45,3 @@ graalvmNative {
 }
 
 graalvmNative.toolchainDetection = true
-
-micronaut {
-    testRuntime("junit5")
-    processing {
-        incremental(true)
-        annotations("owpk.*")
-    }
-}
-
-tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
-    jdkVersion = "25"
-}

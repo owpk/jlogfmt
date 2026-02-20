@@ -1,6 +1,6 @@
 # JlogFmt – CLI Tool for Coloring and Filtering Logs
 
-A lightweight command-line utility built with **Micronaut** and **Picocli** that highlights parts of log lines based on user‑defined regular expression patterns and ANSI color codes.  
+A lightweight command-line utility built with **Picocli** that highlights parts of log lines based on user‑defined regular expression patterns and ANSI color codes.  
 Reads from standard input or files, applies the patterns, and prints the lines with matching substrings wrapped in color escape sequences.  
 Optionally, it can filter out lines that do not contain any match.
 

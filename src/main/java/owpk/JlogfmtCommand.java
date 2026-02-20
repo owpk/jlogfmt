@@ -16,11 +16,13 @@ import java.util.regex.Pattern;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Help.TextTable;
+import picocli.CommandLine.IExecutionExceptionHandler;
 import picocli.CommandLine.IHelpSectionRenderer;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Model.UsageMessageSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import picocli.CommandLine.ParseResult;
 
 @Command(name = "jlogfmt", mixinStandardHelpOptions = true, version = "0.1", description = "Highlight and filter logs using custom color:regex patterns.", header = "JLogFmt", footer = "Color codes: 30-37 (standard), 90-97 (bright). See ANSI codes for more.")
 public class JlogfmtCommand implements Runnable {
@@ -62,16 +64,21 @@ public class JlogfmtCommand implements Runnable {
     }
 
     public static void main(String[] args) {
-        try {
-            var command = new JlogfmtCommand();
-            var cmd = new CommandLine(command);
+        var command = new JlogfmtCommand();
+        var cmd = new CommandLine(command);
+        cmd.setExecutionExceptionHandler(new IExecutionExceptionHandler() {
 
-            customizeHelp(cmd.getCommandSpec());
+            @Override
+            public int handleExecutionException(Exception ex, CommandLine commandLine, ParseResult fullParseResult) throws Exception {
+                err.log("jlogfmt error: " + ex.getLocalizedMessage());
+                return 1;
+            }
+            
+        });
 
-            cmd.execute(args);
-        } catch (Exception e) {
-            err.log(e.getLocalizedMessage());
-        }
+        customizeHelp(cmd.getCommandSpec());
+
+        cmd.execute(args);
     }
 
     private static record MacroInfo(
@@ -192,7 +199,7 @@ public class JlogfmtCommand implements Runnable {
 
     private List<PatternWithColor> parsePatterns(List<String> patterns) {
         List<PatternWithColor> result = new ArrayList<>();
-        var patternParser = Pattern.compile("^(\\d+):(.*)$");
+        var patternParser = Pattern.compile("^(\\d+):(\\{.*\\}|\\(.*\\))$");
         for (var p : patterns) {
             var m = patternParser.matcher(p.trim());
             if (m.matches()) {
@@ -206,7 +213,7 @@ public class JlogfmtCommand implements Runnable {
                     err.log("Warning: Unsupported color code " + color + " in pattern: " + p + ". Ignored.");
                 }
             } else {
-                err.log("Warning: Invalid pattern format: " + p + ". Expected 'color:regex'. Ignored.");
+                throw new IllegalArgumentException("Invalid pattern format: " + p + ". Expected '<color>:(<regex>) or <color>:{<macro>}'");
             }
         }
         return result;
@@ -289,7 +296,7 @@ public class JlogfmtCommand implements Runnable {
 
         // If no matches, print line as is (unless filter mode prevented it)
         if (matches.isEmpty()) {
-            info.log(line);
+            System.out.println(line);
             return;
         }
 
@@ -315,31 +322,17 @@ public class JlogfmtCommand implements Runnable {
             highlighted.append(line.substring(lastIdx));
         }
 
-        info.log(highlighted.toString());
+        System.out.println(highlighted.toString());
     }
 
     // Helper classes
-    private static class PatternWithColor {
-        int color;
-        String regex;
-
-        PatternWithColor(int color, String regex) {
-            this.color = color;
-            this.regex = regex;
-        }
+    record PatternWithColor(int color, String regex) {
     }
 
-    private static class Match {
-        int start, end, color;
-
-        Match(int start, int end, int color) {
-            this.start = start;
-            this.end = end;
-            this.color = color;
-        }
+    record Match(int start, int end, int color) {
     }
 
-    private record LoggerProps(
+    record LoggerProps(
             String pattern,
             boolean isErr,
             boolean carriegeReturn,
@@ -350,7 +343,6 @@ public class JlogfmtCommand implements Runnable {
         }
     }
 
-    private static Logger info = (props) -> System.out.printf(definePattern(props), props.args);
     private static Logger err = (props) -> System.err.printf(definePattern(props), props.args);
 
     private static String definePattern(LoggerProps props) {
@@ -362,10 +354,6 @@ public class JlogfmtCommand implements Runnable {
 
         default void log(String object) {
             this.log(new LoggerProps("%s", List.of(object)));
-        }
-
-        default void log() {
-            this.log(new LoggerProps("", true, false, List.of()));
         }
     }
 
