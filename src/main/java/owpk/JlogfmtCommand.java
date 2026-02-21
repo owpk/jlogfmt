@@ -69,11 +69,12 @@ public class JlogfmtCommand implements Runnable {
         cmd.setExecutionExceptionHandler(new IExecutionExceptionHandler() {
 
             @Override
-            public int handleExecutionException(Exception ex, CommandLine commandLine, ParseResult fullParseResult) throws Exception {
+            public int handleExecutionException(Exception ex, CommandLine commandLine, ParseResult fullParseResult)
+                    throws Exception {
                 err.log("jlogfmt error: " + ex.getLocalizedMessage());
                 return 1;
             }
-            
+
         });
 
         customizeHelp(cmd.getCommandSpec());
@@ -101,7 +102,12 @@ public class JlogfmtCommand implements Runnable {
     private static final List<String> DEFAULT_PATTERNS = Arrays.asList(
             "32:{TS_ISO}", // timestamp in green
             "33:{LOGLEVEL}", // level in yellow
-            "31:(ERROR)" // ERROR in red (overrides yellow if both match)
+            "31:(ERROR)", // ERROR in red (overrides yellow if both match)
+            "90:(\\d+)(?=\\s+---)",
+            "36:(?<=---\\s+\\[)([^\\]]+)",
+            "34:(?<=\\]\\s+\\[)([^\\]]+)",
+            "35:([a-zA-Z0-9.$]+)(?=\\s+:)",
+            "50:(?<=:\\s+).*$" // msg
     );
 
     private static final Map<String, MacroInfo> MACROS_ = new HashMap<>();
@@ -162,6 +168,7 @@ public class JlogfmtCommand implements Runnable {
         ANSI_COLORS.put(96, "\u001B[96m"); // bright cyan
         ANSI_COLORS.put(97, "\u001B[97m"); // bright white
     }
+
     private static final String RESET = "\u001B[0m";
 
     @Override
@@ -213,7 +220,8 @@ public class JlogfmtCommand implements Runnable {
                     err.log("Warning: Unsupported color code " + color + " in pattern: " + p + ". Ignored.");
                 }
             } else {
-                throw new IllegalArgumentException("Invalid pattern format: " + p + ". Expected '<color>:(<regex>) or <color>:{<macro>}'");
+                throw new IllegalArgumentException(
+                        "Invalid pattern format: " + p + ". Expected '<color>:(<regex>) or <color>:{<macro>}'");
             }
         }
         return result;
